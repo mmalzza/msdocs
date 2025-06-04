@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Linking, Platform } from 'react-native';
+import { SafeAreaView, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform, KeyboardAvoidingView } from 'react-native';
 import axios from 'axios';
-import { WebView } from 'react-native-webview';
+import * as WebBrowser from 'expo-web-browser';
+import { Ionicons } from '@expo/vector-icons';
+
 
 const API_URL = 'http://192.168.45.205:5000';
 
@@ -11,8 +13,15 @@ export default function App() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [pdfUrl, setPdfUrl] = useState('');
   const [data, setData] = useState({});
+  const [pdfShown, setPdfShown] = useState(false);
   const scrollViewRef = useRef(null);
   const isFirstRender = useRef(true);
+
+  const openPdfInSafari = async () => {
+    if (pdfUrl) {
+      await WebBrowser.openBrowserAsync(pdfUrl);
+    }
+  };
 
   const questions = [
     { field: "FOREIGN  RESIDENT  REGISTRATION", text: "외국인 등록에 해당하십니까? (y/n)" },
@@ -126,12 +135,17 @@ export default function App() {
       }
 
       // 마지막 질문 다음엔 PDF URL 받아오기
-      if (currentQuestion === questions.length - 1) {
+      if (currentQuestion === questions.length - 1 && !pdfShown) {
         const response = await axios.get(`${API_URL}/api/get_pdf_url`);
         setPdfUrl(response.data.pdfUrl);
+        setMessages(prev => [...prev, { type: 'pdf' }]);
+        setPdfShown(true);
+        setCurrentQuestion(prev => prev + 1); 
+        return;
       }
 
       setCurrentQuestion(prev => prev + 1);
+
     } catch (error) {
       if (axios.isAxiosError(error)) {
         console.error('Axios error message:', error.message);
@@ -154,107 +168,112 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.messagesContainer}
-        ref={scrollViewRef}
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {messages.map((message, idx) => (
-          <View
-            key={idx}
-            style={[
-              styles.messageBubble,
-              message.type === 'user' ? styles.userBubble : styles.botBubble,
-            ]}
-          >
-            <Text style={message.type === 'user' ? styles.userText : styles.botText}>
-              {message.text}
-            </Text>
-          </View>
-        ))}
+        <ScrollView
+          contentContainerStyle={styles.chatContainer}
+          ref={scrollViewRef}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((msg, index) => {
+            if (msg.type === 'pdf') {
+              return (
+                <View key={index} style={[styles.messageBubble, styles.botBubble]}>
+                  <TouchableOpacity style={styles.pdfButton} onPress={openPdfInSafari}>
+                    <Text style={styles.pdfButtonText}>PDF 열기</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            } else {
+              return (
+                <View
+                  key={index}
+                  style={[
+                    styles.messageBubble,
+                    msg.type === 'bot' ? styles.botBubble : styles.userBubble,
+                  ]}
+                >
+                  <Text style={styles.messageText}>{msg.text}</Text>
+                </View>
+              );
+            }
+          })}
+        </ScrollView>
 
-        {pdfUrl ? (
-          <View style={{ height: 400, marginVertical: 10 }}>
-            <WebView
-              source={{ uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUrl)}` }}
-              style={{ flex: 1 }}
-            />
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={input}
-          onChangeText={setInput}
-          placeholder="답변을 입력하세요"
-          onSubmitEditing={handleSubmit}
-          returnKeyType="send"
-          blurOnSubmit={false}
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSubmit}>
-          <Text style={styles.sendButtonText}>전송</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="메시지를 입력하세요"
+            value={input}
+            onChangeText={setInput}
+            onSubmitEditing={handleSubmit}
+          />
+          <TouchableOpacity onPress={handleSubmit}>
+            <Ionicons name="send" size={24} color="#4fc3f7" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  messagesContainer: {
-    flex: 1,
-    padding: 10,
+  chatContainer: {
+    padding: 16,
   },
   messageBubble: {
-    marginVertical: 5,
-    padding: 10,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 12,
+    marginVertical: 6,
     maxWidth: '80%',
   },
-  userBubble: {
-    backgroundColor: '#DCF8C6',
-    alignSelf: 'flex-end',
-  },
   botBubble: {
-    backgroundColor: '#E2E2E2',
+    backgroundColor: '#c8e6c9',
     alignSelf: 'flex-start',
   },
-  userText: {
-    color: '#000',
+  userBubble: {
+    backgroundColor: '#e0f7fa',
+    alignSelf: 'flex-end',
   },
-  botText: {
-    color: '#000',
+  messageText: {
+    fontSize: 16,
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 10,
-    borderTopWidth: 1,
-    borderColor: '#CCC',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderColor: '#ccc',
   },
-  textInput: {
+  input: {
     flex: 1,
-    height: Platform.OS === 'ios' ? 40 : 45,
-    borderColor: '#CCC',
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    marginRight: 10,
+    borderColor: '#4fc3f7',
+    marginRight: 8,
   },
-  sendButton: {
-    backgroundColor: '#007AFF',
+  pdfButton: {
+    backgroundColor: '#4fc3f7',
     paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
+    paddingHorizontal: 18,
+    borderRadius: 8,
   },
-  sendButtonText: {
+  pdfButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
