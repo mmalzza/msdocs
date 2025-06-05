@@ -111,23 +111,60 @@ export default function App() {
         serverValue = 'y';
       }
 
-      // PDF 업데이트 API 호출
+      // 서버에 PDF 데이터 업데이트 API 호출
       await axios.post(`${API_URL}/api/update_complaint`, {
         field: serverField,
         value: serverValue
       });
 
-      // 마지막 질문 이후 PDF 링크 요청
-      if (currentQuestion === questions.length - 1 && !pdfShown) {
-        const response = await axios.get(`${API_URL}/api/get_complaint_pdf_url`);
-        setPdfUrl(response.data.pdfUrl);
+      // 6개 답변 다 받은 후(마지막 질문인 경우) /api/generate_complaint_content 호출하여 내용 생성 및 data["Details"]에 저장
+      if (
+        currentQuestion === questions.length - 1 &&
+        !pdfShown
+      ) {
+        // 6개 질문 key 목록
+        const detailKeys = [
+          "work_detail",
+          "period",
+          "location",
+          "wage",
+          "response",
+          "extra_info",
+        ];
 
+        // detailKeys에 해당하는 답변만 필터링
+        const detailData = detailKeys.reduce((acc, k) => {
+          acc[k] = (k in data ? data[k] : "") || "";
+          // 현재 마지막 답변도 포함
+          if (k === key) acc[k] = userMessage;
+          return acc;
+        }, {});
+
+        // 서버에 detailData 보내어 complaint content 생성 요청
+        const contentResponse = await axios.post(`${API_URL}/api/generate_complaint_content`, detailData, {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        // 서버가 생성한 내용 받아서 data["Details"]에 저장
+        const content = contentResponse.data.content || '';
+        setData(prevData => ({ ...prevData, Details: content }));
+
+        // 서버에 Details 내용 업데이트 (PDF 반영)
+        await axios.post(`${API_URL}/api/update_complaint`, {
+          field: "Details",
+          value: content,
+        });
+
+        // PDF URL 받아오기
+        const pdfResponse = await axios.get(`${API_URL}/api/get_complaint_pdf_url`);
+        setPdfUrl(pdfResponse.data.pdfUrl);
+
+        // 메시지 및 PDF 버튼 표시
         setMessages(prev => [
           ...prev,
-          {
-            type: 'bot',
-            text: '모든 질문이 완료되었습니다. 아래 버튼을 눌러 PDF를 확인하세요.',
-          },
+          { type: 'bot', text: '모든 질문이 완료되었습니다. 아래 버튼을 눌러 PDF를 확인하세요.' },
           { type: 'pdf' },
         ]);
         setPdfShown(true);
@@ -140,10 +177,20 @@ export default function App() {
       setCurrentQuestion(nextQuestionIndex);
       setMessages(prev => [
         ...prev,
-        { type: 'bot', text: questions[nextQuestionIndex].question },
+        { type: 'bot', text: questions[nextQuestionIndex]?.question || '' },
       ]);
     } catch (error) {
       console.error('서버 통신 오류:', error);
+      if (error.response) {
+        console.error('응답 데이터:', error.response.data);
+        console.error('응답 상태:', error.response.status);
+        console.error('응답 헤더:', error.response.headers);
+      } else if (error.request) {
+        console.error('요청은 되었지만 응답이 없습니다:', error.request);
+      } else {
+        console.error('에러 메시지:', error.message);
+      }
+
       setMessages(prev => [
         ...prev,
         { type: 'bot', text: '서버와 통신 중 오류가 발생했습니다.' },

@@ -335,7 +335,16 @@ def main():
     wage = input("4. 월급은 원래 얼마였고, 체불된 금액은 총 얼마인가요?")
     response= input("5. 임금 체불에 대해 사업주에게 요청해보신 적이 있나요? 어떤 대응이 있었나요?")
     extra_info = input("6. 추가로 제가 알아야 하는 내용을 더 알려주세요.")
-    user_answer = f"work_detail: {work_detail}\nperiod: {period}\nlocation: {location}\nwage: {wage}\nresponse: {response}\nextra_info: {extra_info}"
+    user_answer = (
+    f"{{\n"
+    f'  "work_detail": "{work_detail}",\n'
+    f'  "period": "{period}",\n'
+    f'  "location": "{location}",\n'
+    f'  "wage": "{wage}",\n'
+    f'  "response": "{response}",\n'
+    f'  "extra_info": "{extra_info}"\n'
+    f"}}"
+)
     
     content = complaint_content(user_answer)
     print("\n진정 내용이 작성되었습니다:")
